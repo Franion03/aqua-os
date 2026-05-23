@@ -1,0 +1,315 @@
+# ── AquaOS GitOps Pipeline ──────────────────────────────────────────────
+# Triggers on push to main (deploy) and PRs (validate only).
+#
+# Architecture:
+#   PR → validate-template → plan (change-set) → comment on PR
+#   push to main → validate → deploy (change-set + execute)
+#   schedule (daily) → drift detection
+#
+# Required GitHub Secrets:
+#   AWS_ACCESS_KEY_ID       — IAM user with CloudFormation + S3 permissions
+#   AWS_SECRET_ACCESS_KEY   — corresponding secret
+#   AWS_REGION              — eu-west-1
+#   GEMINI_API_KEY          — Google Gemini API key (for EC2 bootstrap)
+
+name: AquaOS GitOps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudformation/**'
+      - 'backend/**'
+      - '.github/workflows/deploy.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'cloudformation/**'
+      - 'backend/**'
+  schedule:
+    - cron: '0 8 * * *'  # Daily at 08:00 UTC — drift detection
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AWS_REGION: eu-west-1
+  STACK_NAME: aquaos-poc
+  TEMPLATE: cloudformation/template.yaml
+  PARAMS_FILE: cloudformation/parameters-poc.json
+
+jobs:
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # Validate — runs on every PR and push
+  # ═══════════════════════════════════════════════════════════════════════
+
+  validate:
+    name: Validate Template
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Validate CloudFormation template
+        run: |
+          aws cloudformation validate-template \
+            --template-body "file://${{ env.TEMPLATE }}" \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Lint with cfn-lint
+        run: |
+          pip install cfn-lint
+          cfn-lint ${{ env.TEMPLATE }} --region ${{ env.AWS_REGION }}
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # Plan — create a Change Set for review (PR only)
+  # ═══════════════════════════════════════════════════════════════════════
+
+  plan:
+    name: Plan (Change Set)
+    if: github.event_name == 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Create change set
+        id: changeset
+        run: |
+          CS_NAME="pr-${{ github.event.pull_request.number }}-$(date +%s)"
+          echo "change_set_name=$CS_NAME" >> $GITHUB_OUTPUT
+
+          aws cloudformation create-change-set \
+            --stack-name ${{ env.STACK_NAME }} \
+            --change-set-name "$CS_NAME" \
+            --template-body "file://${{ env.TEMPLATE }}" \
+            --parameters "file://${{ env.PARAMS_FILE }}" \
+            --capabilities CAPABILITY_IAM \
+            --region ${{ env.AWS_REGION }} \
+            --change-set-type UPDATE \
+            || echo "CHANGE_SET_SKIPPED=true" >> $GITHUB_OUTPUT
+
+      - name: Wait for change set
+        if: steps.changeset.outputs.CHANGE_SET_SKIPPED != 'true'
+        run: |
+          aws cloudformation wait change-set-create-complete \
+            --change-set-name "${{ steps.changeset.outputs.change_set_name }}" \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Describe changes
+        if: steps.changeset.outputs.CHANGE_SET_SKIPPED != 'true'
+        id: describe
+        run: |
+          CHANGES=$(aws cloudformation describe-change-set \
+            --change-set-name "${{ steps.changeset.outputs.change_set_name }}" \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Changes[*].ResourceChange.{Action:Action,LogicalId:LogicalResourceId,Type:ResourceType,Replacement:Replacement}' \
+            --output table || echo "No changes detected")
+
+          echo 'CHANGES<<EOF' >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
+
+      - name: Delete change set (don't execute on PR)
+        if: steps.changeset.outputs.CHANGE_SET_SKIPPED != 'true'
+        run: |
+          aws cloudformation delete-change-set \
+            --change-set-name "${{ steps.changeset.outputs.change_set_name }}" \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }}
+
+      - name: Comment PR with plan
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const changes = `${{ steps.describe.outputs.CHANGES }}`;
+            const body = changes.trim()
+              ? `## 🏗️ CloudFormation Change Set\n\n\`\`\`\n${changes}\n\`\`\`\n\n✅ Template validated. Review changes above.`
+              : `## ✅ CloudFormation Plan\n\nNo infrastructure changes detected.\n\nTemplate validated successfully.`;
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: body
+            });
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # Deploy — executes on push to main
+  # ═══════════════════════════════════════════════════════════════════════
+
+  deploy:
+    name: Deploy to AWS
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment:
+      name: poc
+      url: https://${{ steps.outputs.outputs.frontend_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy CloudFormation stack
+        id: deploy
+        run: |
+          # Check if stack exists
+          if aws cloudformation describe-stacks --stack-name ${{ env.STACK_NAME }} --region ${{ env.AWS_REGION }} 2>/dev/null; then
+            echo "Stack exists — updating..."
+
+            CS_NAME="deploy-$(date +%s)"
+            aws cloudformation create-change-set \
+              --stack-name ${{ env.STACK_NAME }} \
+              --change-set-name "$CS_NAME" \
+              --template-body "file://${{ env.TEMPLATE }}" \
+              --parameters "file://${{ env.PARAMS_FILE }}" \
+              --capabilities CAPABILITY_IAM \
+              --region ${{ env.AWS_REGION }}
+
+            aws cloudformation wait change-set-create-complete \
+              --change-set-name "$CS_NAME" \
+              --stack-name ${{ env.STACK_NAME }} \
+              --region ${{ env.AWS_REGION }}
+
+            aws cloudformation execute-change-set \
+              --change-set-name "$CS_NAME" \
+              --stack-name ${{ env.STACK_NAME }} \
+              --region ${{ env.AWS_REGION }}
+
+            aws cloudformation wait stack-update-complete \
+              --stack-name ${{ env.STACK_NAME }} \
+              --region ${{ env.AWS_REGION }}
+          else
+            echo "Stack does not exist — creating..."
+
+            aws cloudformation create-stack \
+              --stack-name ${{ env.STACK_NAME }} \
+              --template-body "file://${{ env.TEMPLATE }}" \
+              --parameters "file://${{ env.PARAMS_FILE }}" \
+              --capabilities CAPABILITY_IAM \
+              --region ${{ env.AWS_REGION }} \
+              --tags Key=Project,Value=aquaos Key=Environment,Value=poc \
+                    Key=ManagedBy,Value=github-actions
+
+            aws cloudformation wait stack-create-complete \
+              --stack-name ${{ env.STACK_NAME }} \
+              --region ${{ env.AWS_REGION }}
+          fi
+
+      - name: Retrieve stack outputs
+        id: outputs
+        run: |
+          OUTPUTS=$(aws cloudformation describe-stacks \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }} \
+            --query 'Stacks[0].Outputs' \
+            --output json)
+
+          FRONTEND_URL=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="FrontendUrl") | .OutputValue')
+          API_URL=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="ApiUrl") | .OutputValue')
+          INSTANCE_IP=$(echo "$OUTPUTS" | jq -r '.[] | select(.OutputKey=="InstancePublicIp") | .OutputValue')
+
+          echo "frontend_url=$FRONTEND_URL" >> $GITHUB_OUTPUT
+          echo "api_url=$API_URL" >> $GITHUB_OUTPUT
+          echo "instance_ip=$INSTANCE_IP" >> $GITHUB_OUTPUT
+
+      - name: Smoke test
+        run: |
+          sleep 10  # Let nginx + uvicorn settle after deploy
+          curl -f --retry 5 --retry-delay 10 "${{ steps.outputs.outputs.api_url }}/health" || true
+
+      - name: Summary
+        run: |
+          echo "### 🚀 Deploy Complete" >> $GITHUB_STEP_SUMMARY
+          echo "| Endpoint | URL |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-----|" >> $GITHUB_STEP_SUMMARY
+          echo "| Frontend | ${{ steps.outputs.outputs.frontend_url }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| API      | ${{ steps.outputs.outputs.api_url }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Health   | ${{ steps.outputs.outputs.api_url }}/health |" >> $GITHUB_STEP_SUMMARY
+          echo "| EC2 IP   | ${{ steps.outputs.outputs.instance_ip }} |" >> $GITHUB_STEP_SUMMARY
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # Drift Detection — runs daily, alerts if infra drifted from git
+  # ═══════════════════════════════════════════════════════════════════════
+
+  drift:
+    name: Drift Detection
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Detect stack drift
+        id: drift
+        run: |
+          aws cloudformation detect-stack-drift \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }}
+
+          aws cloudformation wait stack-drift-detection-complete \
+            --stack-name ${{ env.STACK_NAME }} \
+            --region ${{ env.AWS_REGION }}
+
+          DRIFT_STATUS=$(aws cloudformation describe-stack-drift-detection-status \
+            --stack-drift-detection-id $(aws cloudformation describe-stack-drift-detection-status \
+              --stack-name ${{ env.STACK_NAME }} \
+              --region ${{ env.AWS_REGION }} \
+              --query 'StackDriftDetectionId' --output text) \
+            --region ${{ env.AWS_REGION }} \
+            --query 'StackDriftStatus' --output text)
+
+          echo "drift_status=$DRIFT_STATUS" >> $GITHUB_OUTPUT
+
+          if [ "$DRIFT_STATUS" != "IN_SYNC" ]; then
+            echo "::warning::Stack ${{ env.STACK_NAME }} has drifted: $DRIFT_STATUS"
+            aws cloudformation describe-stack-resource-drifts \
+              --stack-name ${{ env.STACK_NAME }} \
+              --region ${{ env.AWS_REGION }} \
+              --query 'StackResourceDrifts[?StackResourceDriftStatus!=`IN_SYNC`].{LogicalId:LogicalResourceId,Type:ResourceType,Drift:StackResourceDriftStatus}' \
+              --output table
+          else
+            echo "✅ Stack ${{ env.STACK_NAME }} is IN_SYNC"
+          fi
+
+      - name: Alert on drift
+        if: steps.drift.outputs.drift_status != 'IN_SYNC'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 Drift detected in ${process.env.STACK_NAME}`,
+              body: `CloudFormation stack \`${process.env.STACK_NAME}\` has drifted from its template.\n\nRun \`./deploy.sh update\` or push to \`main\` to reconcile.`,
+              labels: ['drift', 'infrastructure']
+            });

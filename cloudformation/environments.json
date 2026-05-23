@@ -1,0 +1,31 @@
+# ── AquaOS Environments ─────────────────────────────────────────────────
+# Parameter files per environment. The CI/CD pipeline uses the file
+# matching the target environment (set via GitHub Environments).
+#
+#   poc  → cloudformation/parameters-poc.json   (free tier, eu-west-1)
+#   dev  → cloudformation/parameters-dev.json   (post-PoC)
+#
+# Fields that differ per environment:
+#   - GeminiApiKey (different API keys for dev/prod)
+#   - Environment tag
+#   - InstanceType (t3.micro for poc, t3.small for dev)
+
+# ── PoC (always-on, free tier) ──────────────────────────────────────────
+{
+  "poc": {
+    "SshKeyName": "aquaos-poc",
+    "AllowedSshCidr": "0.0.0.0/0",
+    "InstanceType": "t3.micro",
+    "RootVolumeSize": "20",
+    "ProjectName": "aquaos",
+    "Environment": "poc"
+  },
+  "dev": {
+    "SshKeyName": "aquaos-dev",
+    "AllowedSshCidr": "0.0.0.0/0",
+    "InstanceType": "t3.small",
+    "RootVolumeSize": "20",
+    "ProjectName": "aquaos",
+    "Environment": "dev"
+  }
+}

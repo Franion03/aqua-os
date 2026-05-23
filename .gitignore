@@ -1,0 +1,50 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ── CloudFormation / GitOps ──────────────────────────────────────────
+cloudformation/parameters-*.json
+!cloudformation/parameters.example.json
+!cloudformation/environments.json
+*.pem
+
+# ── Terraform (legacy) ──────────────────────────────────────────────
+terraform/.terraform/
+terraform/*.tfstate*
+terraform/*.tfvars
+!terraform/terraform.tfvars.example
+
+# ── Backend ─────────────────────────────────────────────────────────
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.sqlite
+backend/*.db
+backend/chroma_data/
+backend/.env
+!backend/.env.example

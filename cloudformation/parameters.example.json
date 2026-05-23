@@ -1,0 +1,30 @@
+[
+  {
+    "ParameterKey": "SshKeyName",
+    "ParameterValue": "aquaos-poc"
+  },
+  {
+    "ParameterKey": "GeminiApiKey",
+    "ParameterValue": "your-gemini-api-key-here"
+  },
+  {
+    "ParameterKey": "AllowedSshCidr",
+    "ParameterValue": "0.0.0.0/0"
+  },
+  {
+    "ParameterKey": "InstanceType",
+    "ParameterValue": "t3.micro"
+  },
+  {
+    "ParameterKey": "RootVolumeSize",
+    "ParameterValue": "20"
+  },
+  {
+    "ParameterKey": "ProjectName",
+    "ParameterValue": "aquaos"
+  },
+  {
+    "ParameterKey": "Environment",
+    "ParameterValue": "poc"
+  }
+]
