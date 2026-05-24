@@ -102,8 +102,9 @@ resource "aws_instance" "aquaos" {
 
   # Bootstrap script — installs everything
   user_data = templatefile("${path.module}/user-data.sh", {
-    gemini_api_key = var.gemini_api_key
-    project_name   = var.project_name
+    gemini_api_key     = var.gemini_api_key
+    openrouter_api_key = var.openrouter_api_key
+    project_name       = var.project_name
   })
 
   # IAM role: allow SSM (optional, for console access without SSH)

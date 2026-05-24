@@ -11,6 +11,9 @@ allowed_ssh_cidr = "0.0.0.0/0" # ⚠️ RESTRICT THIS TO YOUR IP
 # Google Gemini API key (https://aistudio.google.com/)
 gemini_api_key = "AIza..."
 
+# OpenRouter API key (https://openrouter.ai/keys) — multi-model LLM routing
+openrouter_api_key = "sk-or-v1-..."
+
 # Optional overrides
 # aws_region       = "eu-west-1"
 # instance_type    = "t3.micro"

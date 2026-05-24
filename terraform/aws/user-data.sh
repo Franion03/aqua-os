@@ -7,6 +7,7 @@
 set -euo pipefail
 
 GEMINI_KEY="${gemini_api_key}"
+OPENROUTER_KEY="${openrouter_api_key}"
 PROJECT="${project_name}"
 REPO_URL="https://github.com/franion03/aqua-os.git"  # update if different
 APP_DIR="/opt/aquaos"
@@ -57,6 +58,7 @@ pip3.12 install \
 # (used by both the Python backend and optionally the React build)
 cat > "$${APP_DIR}/backend/.env" << ENVEOF
 GEMINI_API_KEY=$${GEMINI_KEY}
+OPENROUTER_API_KEY=$${OPENROUTER_KEY}
 ENVEOF
 
 # Also create a symlink for the frontend .env (if still needed at build time)
@@ -109,6 +111,7 @@ User=ec2-user
 WorkingDirectory=/opt/aquaos/backend
 Environment=PYTHONUNBUFFERED=1
 Environment=GEMINI_API_KEY=$${GEMINI_KEY}
+Environment=OPENROUTER_API_KEY=$${OPENROUTER_KEY}
 ExecStart=/usr/bin/python3.12 -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers 2
 Restart=always
 RestartSec=5

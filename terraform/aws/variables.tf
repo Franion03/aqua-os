@@ -56,6 +56,15 @@ variable "gemini_api_key" {
   sensitive   = true
 }
 
+# ── OpenRouter API Key ──────────────────────────────────────────────────
+
+variable "openrouter_api_key" {
+  description = "OpenRouter API key for multi-model LLM (DeepSeek, Claude, Gemini)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 # ── Domain / Naming ─────────────────────────────────────────────────────
 
 variable "project_name" {

@@ -8,6 +8,10 @@
     "ParameterValue": "your-gemini-api-key-here"
   },
   {
+    "ParameterKey": "OpenRouterApiKey",
+    "ParameterValue": "sk-or-v1-..."
+  },
+  {
     "ParameterKey": "AllowedSshCidr",
     "ParameterValue": "0.0.0.0/0"
   },
