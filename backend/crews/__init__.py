@@ -7,6 +7,7 @@ from .enrollment import build_enrollment_crew, run_enrollment
 from .progress_review import build_progress_review_crew, run_progress_review
 from .season_plan import build_season_plan_crew, run_season_plan
 from .injury_response import build_injury_response_crew, run_injury_response
+from .lineup_builder import build_lineup_crew, run_lineup_builder
 
 # Registry: maps crew_type string → run function
 CREW_REGISTRY = {
@@ -15,6 +16,7 @@ CREW_REGISTRY = {
     "progress_review": run_progress_review,
     "season_plan": run_season_plan,
     "injury_response": run_injury_response,
+    "lineup_builder": run_lineup_builder,
 }
 
 __all__ = [
