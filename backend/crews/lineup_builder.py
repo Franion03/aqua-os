@@ -16,6 +16,7 @@ from llm_config import model_for
 from tools.player_db import get_roster_players, get_player_details
 from tools.email_tool import send_parent_email
 from tools.whatsapp_tool import send_whatsapp, send_whatsapp_bulk
+from tools.telegram_tool import send_telegram, send_telegram_bulk, send_telegram_channel
 from tools.sbb_tool import get_arrival_plan, get_return_plan
 
 logger = logging.getLogger(__name__)
@@ -72,7 +73,7 @@ marketing_agent = Agent(
         "Professional sports club communicator who ensures every parent "
         "knows exactly when and where to be, with clear travel instructions."
     ),
-    tools=[send_parent_email, send_whatsapp_bulk, send_whatsapp, get_roster_players],
+    tools=[send_telegram_channel, send_telegram_bulk, send_telegram, send_parent_email, send_whatsapp_bulk, get_roster_players],
     allow_delegation=False,
     verbose=True,
     llm=model_for("marketing"),
@@ -154,19 +155,21 @@ def build_lineup_crew(opponent: str, match_date: str, match_time: str = "14:00",
 
     send_lineup = Task(
         description=(
-            "Draft a complete match-day communication and send it via WhatsApp to ALL parents. "
-            "CRITICAL: After drafting, actually send the message using send_whatsapp_bulk "
-            "to the parent_phone of every player in the lineup. "
-            "Include EVERYTHING in ONE concise WhatsApp message: "
-            "1. 📅 MATCH: opponent, date, time, pool address "
-            "2. 🚂 TRAVEL: exact departure from Bern HB, connections, arrival, "
-            f"   and return trip plan (players must arrive by {arrival_time}) "
-            "3. 🏊 LINEUP: the full 13-player roster with positions "
-            "4. ✅ CHECKLIST: cap, weight belt, towel, water bottle, swimsuit "
-            "5. 📍 MEETING POINT: Bern HB main hall, under the big clock, "
-            "   30 minutes before departure "
-            "Query the player database to get all parent_phone numbers. "
-            "Then call send_whatsapp_bulk with all parent phones and the message. "
+            "Draft a complete match-day communication and send it via Telegram channel to ALL parents. "
+            "CRITICAL: After drafting, send the message using send_telegram_channel first "
+            "(this reaches all parents in the club channel at once). "
+            "Include EVERYTHING in ONE message with HTML formatting for Telegram: "
+            "1. 📅 <b>MATCH</b>: opponent, date, time, pool address "
+            "2. 🚂 <b>TRAVEL</b>: exact departure from Bern HB, connections, arrival, "
+            f"   and return trip (players must arrive by {arrival_time}) "
+            "3. 🏊 <b>LINEUP</b>: full 13-player roster with positions "
+            "4. ✅ <b>CHECKLIST</b>: cap, weight belt, towel, water bottle, swimsuit "
+            "5. 📍 <b>MEETING POINT</b>: Bern HB main hall, under the big clock, 30 min before departure "
+            "Use HTML tags: <b>bold</b> for section headers, <i>italic</i> for notes, "
+            "<a href='...'>links</a> for SBB timetable URLs. "
+            "Query the player database to get all parent_telegram handles. "
+            "Call send_telegram_channel first to send to the club channel. "
+            "Then call send_telegram_bulk with all parent_telegram handles as DM backup. "
             "End with club president signature."
         ),
         agent=marketing_agent,

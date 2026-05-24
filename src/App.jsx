@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Dumbbell, LayoutDashboard, CalendarDays } from 'lucide-react';
+import { Dumbbell, LayoutDashboard, CalendarDays, Bot } from 'lucide-react';
 import LevelView from './components/LevelView';
 import TrainingPlanner from './components/TrainingPlanner';
+import CrewMonitor from './components/CrewMonitor';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'levels', label: 'Levels', icon: Dumbbell },
   { id: 'planner', label: 'Planner', icon: CalendarDays },
+  { id: 'crews', label: 'Crews', icon: Bot },
 ];
 
 export default function App() {
@@ -39,6 +41,7 @@ export default function App() {
           {activeTab === 'dashboard' && <Dashboard />}
           {activeTab === 'levels' && <LevelView />}
           {activeTab === 'planner' && <TrainingPlanner />}
+          {activeTab === 'crews' && <CrewMonitor />}
         </div>
       </main>
 
