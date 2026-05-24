@@ -37,7 +37,6 @@ env:
   AWS_REGION: eu-west-1
   STACK_NAME: aquaos-poc
   TEMPLATE: cloudformation/template.yaml
-  PARAMS_FILE: cloudformation/parameters-poc.json
 
 jobs:
 
@@ -94,11 +93,24 @@ jobs:
           CS_NAME="pr-${{ github.event.pull_request.number }}-$(date +%s)"
           echo "change_set_name=$CS_NAME" >> $GITHUB_OUTPUT
 
+          # Generate parameters JSON with Gemini key from GitHub Secret
+          cat > /tmp/cfn-params.json << PARAMEOF
+          [
+            {"ParameterKey":"SshKeyName","ParameterValue":"aquaos-poc"},
+            {"ParameterKey":"GeminiApiKey","ParameterValue":"${{ secrets.GEMINI_API_KEY }}"},
+            {"ParameterKey":"AllowedSshCidr","ParameterValue":"0.0.0.0/0"},
+            {"ParameterKey":"InstanceType","ParameterValue":"t3.micro"},
+            {"ParameterKey":"RootVolumeSize","ParameterValue":"20"},
+            {"ParameterKey":"ProjectName","ParameterValue":"aquaos"},
+            {"ParameterKey":"Environment","ParameterValue":"poc"}
+          ]
+          PARAMEOF
+
           aws cloudformation create-change-set \
             --stack-name ${{ env.STACK_NAME }} \
             --change-set-name "$CS_NAME" \
             --template-body "file://${{ env.TEMPLATE }}" \
-            --parameters "file://${{ env.PARAMS_FILE }}" \
+            --parameters "file:///tmp/cfn-params.json" \
             --capabilities CAPABILITY_IAM \
             --region ${{ env.AWS_REGION }} \
             --change-set-type UPDATE \
@@ -173,6 +185,20 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Generate parameters
+        run: |
+          cat > /tmp/cfn-params.json << PARAMEOF
+          [
+            {"ParameterKey":"SshKeyName","ParameterValue":"aquaos-poc"},
+            {"ParameterKey":"GeminiApiKey","ParameterValue":"${{ secrets.GEMINI_API_KEY }}"},
+            {"ParameterKey":"AllowedSshCidr","ParameterValue":"0.0.0.0/0"},
+            {"ParameterKey":"InstanceType","ParameterValue":"t3.micro"},
+            {"ParameterKey":"RootVolumeSize","ParameterValue":"20"},
+            {"ParameterKey":"ProjectName","ParameterValue":"aquaos"},
+            {"ParameterKey":"Environment","ParameterValue":"poc"}
+          ]
+          PARAMEOF
+
       - name: Deploy CloudFormation stack
         id: deploy
         run: |
@@ -185,7 +211,7 @@ jobs:
               --stack-name ${{ env.STACK_NAME }} \
               --change-set-name "$CS_NAME" \
               --template-body "file://${{ env.TEMPLATE }}" \
-              --parameters "file://${{ env.PARAMS_FILE }}" \
+              --parameters "file:///tmp/cfn-params.json" \
               --capabilities CAPABILITY_IAM \
               --region ${{ env.AWS_REGION }}
 
@@ -208,7 +234,7 @@ jobs:
             aws cloudformation create-stack \
               --stack-name ${{ env.STACK_NAME }} \
               --template-body "file://${{ env.TEMPLATE }}" \
-              --parameters "file://${{ env.PARAMS_FILE }}" \
+              --parameters "file:///tmp/cfn-params.json" \
               --capabilities CAPABILITY_IAM \
               --region ${{ env.AWS_REGION }} \
               --tags Key=Project,Value=aquaos Key=Environment,Value=poc \

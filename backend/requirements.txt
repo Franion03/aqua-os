@@ -3,8 +3,7 @@
 
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
-crewai>=0.80.0
-crewai-tools>=0.16.0
+crewai[google-genai]>=1.0.0
 chromadb>=0.5.0
 sqlalchemy>=2.0.0
 python-dotenv>=1.0.0

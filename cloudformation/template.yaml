@@ -166,96 +166,97 @@ Resources:
             VolumeSize: !Ref RootVolumeSize
             Encrypted: true
       UserData:
-        Fn::Base64: !Sub |
-          #!/usr/bin/env bash
-          set -euo pipefail
-          exec > >(tee -a /var/log/aquaos-bootstrap.log) 2>&1
-          echo "=== AquaOS Bootstrap started at $(date -u) ==="
+        Fn::Base64:
+          Fn::Sub: |
+            #!/usr/bin/env bash
+            set -euo pipefail
+            exec > >(tee -a /var/log/aquaos-bootstrap.log) 2>&1
+            echo "=== AquaOS Bootstrap started at $(date -u) ==="
 
-          # System updates
-          dnf update -y
+            # System updates
+            dnf update -y
 
-          # Runtime dependencies
-          dnf install -y python3.12 python3.12-pip python3.12-devel nginx git gcc sqlite-devel
-          alternatives --set python3 /usr/bin/python3.12 || true
-          python3.12 -m ensurepip --upgrade || true
-          pip3.12 install --upgrade pip
+            # Runtime dependencies
+            dnf install -y python3.12 python3.12-pip python3.12-devel nginx git gcc sqlite-devel
+            alternatives --set python3 /usr/bin/python3.12 || true
+            python3.12 -m ensurepip --upgrade || true
+            pip3.12 install --upgrade pip
 
-          # Clone repo
-          APP_DIR="/opt/aquaos"
-          mkdir -p "$${APP_DIR}"
-          if [ ! -d "$${APP_DIR}/.git" ]; then
-            git clone https://github.com/franion03/aqua-os.git "$${APP_DIR}"
-          fi
-          cd "$${APP_DIR}"
+            # Clone repo
+            APP_DIR="/opt/aquaos"
+            mkdir -p "$APP_DIR"
+            if [ ! -d "$APP_DIR/.git" ]; then
+              git clone https://github.com/franion03/aqua-os.git "$APP_DIR"
+            fi
+            cd "$APP_DIR"
 
-          # Python dependencies
-          pip3.12 install fastapi uvicorn[standard] crewai crewai-tools chromadb sqlalchemy python-dotenv pydantic httpx
+            # Python dependencies
+            pip3.12 install fastapi uvicorn[standard] 'crewai[google-genai]' chromadb sqlalchemy python-dotenv pydantic httpx
 
-          # Gemini API key
-          mkdir -p backend
-          cat > backend/.env << ENVEOF
-          GEMINI_API_KEY=${GeminiApiKey}
-          ENVEOF
+            # Gemini API key
+            mkdir -p backend
+            cat > backend/.env << ENVEOF
+            GEMINI_API_KEY=${GeminiApiKey}
+            ENVEOF
 
-          # Nginx config
-          cat > /etc/nginx/conf.d/aquaos.conf << 'NGINXEOF'
-          server {
-              listen 80;
-              server_name _;
-              root /opt/aquaos/dist;
-              index index.html;
-              location /api/ {
-                  proxy_pass http://127.0.0.1:8000;
-                  proxy_set_header Host $host;
-                  proxy_set_header X-Real-IP $remote_addr;
-                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-                  proxy_set_header X-Forwarded-Proto $scheme;
-                  proxy_read_timeout 120s;
-              }
-              location / {
-                  try_files $uri $uri/ /index.html;
-              }
-              gzip on;
-              gzip_types text/plain text/css application/json application/javascript text/xml;
-          }
-          NGINXEOF
-          rm -f /etc/nginx/conf.d/default.conf
+            # Nginx config
+            cat > /etc/nginx/conf.d/aquaos.conf << 'NGINXEOF'
+            server {
+                listen 80;
+                server_name _;
+                root /opt/aquaos/dist;
+                index index.html;
+                location /api/ {
+                    proxy_pass http://127.0.0.1:8000;
+                    proxy_set_header Host $host;
+                    proxy_set_header X-Real-IP $remote_addr;
+                    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                    proxy_set_header X-Forwarded-Proto $scheme;
+                    proxy_read_timeout 120s;
+                }
+                location / {
+                    try_files $uri $uri/ /index.html;
+                }
+                gzip on;
+                gzip_types text/plain text/css application/json application/javascript text/xml;
+            }
+            NGINXEOF
+            rm -f /etc/nginx/conf.d/default.conf
 
-          # systemd service
-          cat > /etc/systemd/system/aquaos-backend.service << SERVICEEOF
-          [Unit]
-          Description=AquaOS FastAPI Backend (CrewAI)
-          After=network.target
-          [Service]
-          Type=simple
-          User=ec2-user
-          WorkingDirectory=/opt/aquaos/backend
-          Environment=PYTHONUNBUFFERED=1
-          Environment=GEMINI_API_KEY=${GeminiApiKey}
-          ExecStart=/usr/bin/python3.12 -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers 2
-          Restart=always
-          RestartSec=5
-          [Install]
-          WantedBy=multi-user.target
-          SERVICEEOF
-          systemctl daemon-reload
-          systemctl enable aquaos-backend
+            # systemd service
+            cat > /etc/systemd/system/aquaos-backend.service << SERVICEEOF
+            [Unit]
+            Description=AquaOS FastAPI Backend (CrewAI)
+            After=network.target
+            [Service]
+            Type=simple
+            User=ec2-user
+            WorkingDirectory=/opt/aquaos/backend
+            Environment=PYTHONUNBUFFERED=1
+            Environment=GEMINI_API_KEY=${GeminiApiKey}
+            ExecStart=/usr/bin/python3.12 -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers 2
+            Restart=always
+            RestartSec=5
+            [Install]
+            WantedBy=multi-user.target
+            SERVICEEOF
+            systemctl daemon-reload
+            systemctl enable aquaos-backend
 
-          # Placeholder frontend
-          if [ ! -f "$${APP_DIR}/dist/index.html" ]; then
-            mkdir -p "$${APP_DIR}/dist"
-            cat > "$${APP_DIR}/dist/index.html" << HTMLEOF
-          <!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>AquaOS — PoC</title><style>body{font-family:system-ui;max-width:720px;margin:4rem auto;padding:0 1rem;background:#0f172a;color:#e2e8f0}h1{color:#22d3ee}code{background:#1e293b;padding:.15em .4em;border-radius:4px}.endpoint{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:1rem;margin:.5rem 0}.method{font-weight:700;color:#22d3ee}</style></head><body><h1>🤽 AquaOS PoC — Running</h1><p>Backend alive. API endpoints:</p><div class="endpoint"><span class="method">GET</span> <code>/api/health</code> — Health check</div><div class="endpoint"><span class="method">GET</span> <code>/api/players</code> — List players</div><div class="endpoint"><span class="method">POST</span> <code>/api/crew/run</code> — Trigger agent crew</div><div class="endpoint"><span class="method">GET</span> <code>/api/crew/status</code> — Last crew status</div><p style="margin-top:2rem;font-size:.85rem;color:#64748b">Full React dashboard deploys separately via <code>npm run build</code> → S3 + CloudFront.</p></body></html>
-          HTMLEOF
-          fi
-          chown -R ec2-user:ec2-user "$${APP_DIR}"
+            # Placeholder frontend
+            if [ ! -f "$APP_DIR/dist/index.html" ]; then
+              mkdir -p "$APP_DIR/dist"
+              cat > "$APP_DIR/dist/index.html" << HTMLEOF
+            <!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>AquaOS — PoC</title><style>body{font-family:system-ui;max-width:720px;margin:4rem auto;padding:0 1rem;background:#0f172a;color:#e2e8f0}h1{color:#22d3ee}code{background:#1e293b;padding:.15em .4em;border-radius:4px}.endpoint{background:#1e293b;border:1px solid #334155;border-radius:8px;padding:1rem;margin:.5rem 0}.method{font-weight:700;color:#22d3ee}</style></head><body><h1>🤽 AquaOS PoC — Running</h1><p>Backend alive. API endpoints:</p><div class="endpoint"><span class="method">GET</span> <code>/api/health</code> — Health check</div><div class="endpoint"><span class="method">GET</span> <code>/api/players</code> — List players</div><div class="endpoint"><span class="method">POST</span> <code>/api/crew/run</code> — Trigger agent crew</div><div class="endpoint"><span class="method">GET</span> <code>/api/crew/status</code> — Last crew status</div><p style="margin-top:2rem;font-size:.85rem;color:#64748b">Full React dashboard deploys separately via <code>npm run build</code> → S3 + CloudFront.</p></body></html>
+            HTMLEOF
+            fi
+            chown -R ec2-user:ec2-user "$APP_DIR"
 
-          systemctl enable nginx
-          systemctl start nginx
-          systemctl start aquaos-backend || true
+            systemctl enable nginx
+            systemctl start nginx
+            systemctl start aquaos-backend || true
 
-          echo "=== AquaOS Bootstrap completed at $(date -u) ==="
+            echo "=== AquaOS Bootstrap completed at $(date -u) ==="
 
       Tags:
         - Key: Name
@@ -331,7 +332,7 @@ Resources:
             S3OriginConfig:
               OriginAccessIdentity: !Sub origin-access-identity/cloudfront/${CloudFrontOAI}
           - Id: EC2-aquaos-backend
-            DomainName: !GetAtt ElasticIP.DNSName
+            DomainName: !GetAtt EC2Instance.PublicDnsName
             CustomOriginConfig:
               HTTPPort: 80
               HTTPSPort: 443
@@ -391,7 +392,7 @@ Outputs:
 
   InstancePublicDns:
     Description: Public DNS of the EC2 instance
-    Value: !GetAtt ElasticIP.DNSName
+    Value: !GetAtt EC2Instance.PublicDnsName
 
   SshCommand:
     Description: SSH command to connect
