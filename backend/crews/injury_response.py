@@ -9,6 +9,7 @@ Outputs: Recovery plan, modified training regimen, parent notification.
 import logging
 
 from crewai import Agent, Crew, Process, Task
+from llm_config import model_for
 
 from tools.player_db import get_player_details, add_progress_log
 from tools.email_tool import send_parent_email
@@ -31,6 +32,7 @@ physical_coach = Agent(
     tools=[get_player_details],
     allow_delegation=False,
     verbose=True,
+    llm=model_for("physical"),
 )
 
 technical_coach = Agent(
@@ -45,6 +47,7 @@ technical_coach = Agent(
     tools=[get_player_details, add_progress_log],
     allow_delegation=False,
     verbose=True,
+    llm=model_for("technical"),
 )
 
 marketing_agent = Agent(
@@ -59,6 +62,7 @@ marketing_agent = Agent(
     tools=[send_parent_email, get_player_details],
     allow_delegation=False,
     verbose=True,
+    llm=model_for("marketing"),
 )
 
 

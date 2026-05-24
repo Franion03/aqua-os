@@ -9,6 +9,7 @@ Outputs: Tactical briefing, 13-player roster, parent email, warmup plan.
 import logging
 
 from crewai import Agent, Crew, Process, Task
+from llm_config import model_for
 
 from tools.player_db import get_roster_players
 from tools.email_tool import send_parent_email
@@ -31,6 +32,7 @@ tactical_analyst = Agent(
     tools=[get_roster_players],
     allow_delegation=False,
     verbose=True,
+    llm=model_for("tactical"),
 )
 
 technical_coach = Agent(
@@ -45,6 +47,7 @@ technical_coach = Agent(
     tools=[get_roster_players],
     allow_delegation=False,
     verbose=True,
+    llm=model_for("technical"),
 )
 
 marketing_agent = Agent(
@@ -59,6 +62,7 @@ marketing_agent = Agent(
     tools=[send_parent_email, get_roster_players],
     allow_delegation=False,
     verbose=True,
+    llm=model_for("marketing"),
 )
 
 physical_coach = Agent(
@@ -72,6 +76,7 @@ physical_coach = Agent(
     ),
     allow_delegation=False,
     verbose=True,
+    llm=model_for("physical"),
 )
 
 

@@ -9,6 +9,7 @@ Outputs: Full-season training calendar, tournament schedule, budget estimate.
 import logging
 
 from crewai import Agent, Crew, Process, Task
+from llm_config import model_for
 
 from tools.player_db import get_roster_players
 from tools.calendar_tool import schedule_training, schedule_match
@@ -30,6 +31,7 @@ technical_coach = Agent(
     tools=[get_roster_players, schedule_training],
     allow_delegation=False,
     verbose=True,
+    llm=model_for("technical"),
 )
 
 physical_coach = Agent(
@@ -43,6 +45,7 @@ physical_coach = Agent(
     tools=[schedule_training],
     allow_delegation=False,
     verbose=True,
+    llm=model_for("physical"),
 )
 
 marketing_agent = Agent(
@@ -56,6 +59,7 @@ marketing_agent = Agent(
     tools=[get_roster_players],
     allow_delegation=False,
     verbose=True,
+    llm=model_for("marketing"),
 )
 
 tactical_analyst = Agent(
@@ -69,6 +73,7 @@ tactical_analyst = Agent(
     tools=[schedule_match],
     allow_delegation=False,
     verbose=True,
+    llm=model_for("tactical"),
 )
 
 

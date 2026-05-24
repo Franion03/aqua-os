@@ -9,6 +9,7 @@ Outputs: Individual progress reports, level-up recommendations, next-cycle drill
 import logging
 
 from crewai import Agent, Crew, Process, Task
+from llm_config import model_for
 
 from tools.player_db import get_roster_players, get_player_details, add_progress_log
 
@@ -29,6 +30,7 @@ technical_coach = Agent(
     tools=[get_roster_players, get_player_details],
     allow_delegation=False,
     verbose=True,
+    llm=model_for("technical"),
 )
 
 physical_coach = Agent(
@@ -42,6 +44,7 @@ physical_coach = Agent(
     tools=[get_player_details],
     allow_delegation=False,
     verbose=True,
+    llm=model_for("physical"),
 )
 
 

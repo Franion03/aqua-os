@@ -18,7 +18,13 @@ Parameters:
   GeminiApiKey:
     Type: String
     NoEcho: true
-    Description: Google Gemini API key (https://aistudio.google.com/).
+    Description: Google Gemini API key (https://aistudio.google.com/). Fallback if OpenRouter not set.
+
+  OpenRouterApiKey:
+    Type: String
+    NoEcho: true
+    Default: ""
+    Description: OpenRouter API key (https://openrouter.ai/keys). Preferred provider.
 
   AllowedSshCidr:
     Type: String
@@ -197,6 +203,7 @@ Resources:
             mkdir -p backend
             cat > backend/.env << ENVEOF
             GEMINI_API_KEY=${GeminiApiKey}
+            OPENROUTER_API_KEY=${OpenRouterApiKey}
             ENVEOF
 
             # Nginx config
@@ -234,6 +241,7 @@ Resources:
             WorkingDirectory=/opt/aquaos/backend
             Environment=PYTHONUNBUFFERED=1
             Environment=GEMINI_API_KEY=${GeminiApiKey}
+            Environment=OPENROUTER_API_KEY=${OpenRouterApiKey}
             ExecStart=/usr/bin/python3.12 -m uvicorn main:app --host 127.0.0.1 --port 8000 --workers 2
             Restart=always
             RestartSec=5

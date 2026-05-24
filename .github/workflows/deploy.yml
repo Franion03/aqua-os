@@ -9,8 +9,8 @@
 # Required GitHub Secrets:
 #   AWS_ACCESS_KEY_ID       — IAM user with CloudFormation + S3 permissions
 #   AWS_SECRET_ACCESS_KEY   — corresponding secret
-#   AWS_REGION              — eu-west-1
-#   GEMINI_API_KEY          — Google Gemini API key (for EC2 bootstrap)
+#   GEMINI_API_KEY          — Google Gemini API key (fallback)
+#   OPENROUTER_API_KEY      — OpenRouter API key (preferred, multi-model)
 
 name: AquaOS GitOps
 
@@ -98,6 +98,7 @@ jobs:
           [
             {"ParameterKey":"SshKeyName","ParameterValue":"aquaos-poc"},
             {"ParameterKey":"GeminiApiKey","ParameterValue":"${{ secrets.GEMINI_API_KEY }}"},
+            {"ParameterKey":"OpenRouterApiKey","ParameterValue":"${{ secrets.OPENROUTER_API_KEY }}"},
             {"ParameterKey":"AllowedSshCidr","ParameterValue":"0.0.0.0/0"},
             {"ParameterKey":"InstanceType","ParameterValue":"t3.micro"},
             {"ParameterKey":"RootVolumeSize","ParameterValue":"20"},
@@ -191,6 +192,7 @@ jobs:
           [
             {"ParameterKey":"SshKeyName","ParameterValue":"aquaos-poc"},
             {"ParameterKey":"GeminiApiKey","ParameterValue":"${{ secrets.GEMINI_API_KEY }}"},
+            {"ParameterKey":"OpenRouterApiKey","ParameterValue":"${{ secrets.OPENROUTER_API_KEY }}"},
             {"ParameterKey":"AllowedSshCidr","ParameterValue":"0.0.0.0/0"},
             {"ParameterKey":"InstanceType","ParameterValue":"t3.micro"},
             {"ParameterKey":"RootVolumeSize","ParameterValue":"20"},

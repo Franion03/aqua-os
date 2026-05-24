@@ -2,15 +2,18 @@
 AquaOS Backend — FastAPI + CrewAI Agent Orchestrator.
 
 Proof-of-concept deployment on AWS EC2 t3.micro (free tier).
-All agent LLM calls go to Google Gemini (external API).
+Multi-model LLM routing via OpenRouter (preferred) or direct Gemini.
 Database: SQLite (embedded). Vector memory: ChromaDB (embedded).
 
-Crews:
-  match_prep      — Tactical Analyst → Technical Coach → Marketing → Physical Coach
-  enrollment      — Marketing → Technical Coach
-  progress_review — Technical Coach → Physical Coach
-  season_plan     — All 4 agents
-  injury_response — Physical Coach → Technical Coach → Marketing
+Provider priority:
+  1. OPENROUTER_API_KEY → OpenRouter (all providers, per-agent model selection)
+  2. GEMINI_API_KEY      → Google Gemini direct (single model)
+
+Per-agent model assignments (OpenRouter paths):
+  Tactical Analyst   → deepseek/deepseek-chat     (best reasoning)
+  Technical Coach    → google/gemini-2.0-flash-001 (structured output)
+  Physical Coach     → google/gemini-2.0-flash-001 (cheap + fast)
+  Marketing          → anthropic/claude-3.5-haiku  (best copy tone)
 """
 
 import logging
@@ -22,16 +25,37 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# ── Configure LLM before CrewAI imports ─────────────────────────────────
-# CrewAI v0.80+ uses LiteLLM under the hood. By setting the OpenAI-compatible
-# env vars to point at Gemini's endpoint, all agents automatically use Gemini.
-# This avoids needing to pass `llm=` to every Agent constructor.
+# ── LLM Provider Detection (before CrewAI imports) ──────────────────────
+# LiteLLM (CrewAI's engine) uses OPENAI_API_BASE + OPENAI_API_KEY.
+# OpenRouter speaks the OpenAI protocol, so it's a drop-in swap.
 
+_openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
 _gemini_key = os.getenv("GEMINI_API_KEY", "")
-if _gemini_key:
+
+# Provider mode — determines which models are available
+_llm_provider: str  # "openrouter" | "gemini" | "none"
+_llm_default_model: str
+
+if _openrouter_key:
+    _llm_provider = "openrouter"
+    _llm_default_model = "openrouter/google/gemini-2.0-flash-001"
+    os.environ.setdefault("OPENAI_API_BASE", "https://openrouter.ai/api/v1")
+    os.environ.setdefault("OPENAI_API_KEY", _openrouter_key)
+    os.environ.setdefault("OPENAI_MODEL_NAME", _llm_default_model)
+    # OpenRouter-specific headers for cost tracking
+    os.environ.setdefault("OR_SITE_URL", "https://github.com/franion03/aqua-os")
+    os.environ.setdefault("OR_APP_NAME", "AquaOS")
+
+elif _gemini_key:
+    _llm_provider = "gemini"
+    _llm_default_model = "gemini-2.0-flash"
     os.environ.setdefault("OPENAI_API_BASE", "https://generativelanguage.googleapis.com/v1beta/openai/")
     os.environ.setdefault("OPENAI_API_KEY", _gemini_key)
-    os.environ.setdefault("OPENAI_MODEL_NAME", "gemini-2.0-flash")
+    os.environ.setdefault("OPENAI_MODEL_NAME", _llm_default_model)
+
+else:
+    _llm_provider = "none"
+    _llm_default_model = "none"
 
 # ── Now safe to import CrewAI-dependent modules ─────────────────────────
 from crews import CREW_REGISTRY
@@ -76,11 +100,11 @@ CREW_TYPES = sorted(CREW_REGISTRY.keys())
 # ── Health ──────────────────────────────────────────────────────────────
 @app.get("/api/health")
 def health():
-    gemini_ok = bool(os.getenv("GEMINI_API_KEY"))
     return {
         "status": "ok",
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "gemini_configured": gemini_ok,
+        "llm_provider": _llm_provider,
+        "llm_default_model": _llm_default_model,
         "crews_available": CREW_TYPES,
         "crewai_version": _get_crewai_version(),
     }
@@ -123,10 +147,10 @@ def run_crew(req: CrewRunRequest):
             detail=f"Unknown crew type '{req.crew_type}'. Options: {CREW_TYPES}",
         )
 
-    if not _gemini_key:
+    if _llm_provider == "none":
         raise HTTPException(
             status_code=503,
-            detail="GEMINI_API_KEY not configured. Set the environment variable and restart.",
+            detail="No LLM provider configured. Set OPENROUTER_API_KEY or GEMINI_API_KEY.",
         )
 
     run_fn = CREW_REGISTRY[req.crew_type]
