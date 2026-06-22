@@ -1,5 +1,19 @@
 # 🤽 AquaOS — Agentic Water Polo Club Manager
 
+> ⚠️ **DEPRECATED** — This monolith has been split into independent microservices. Use the repos below for active development:
+>
+> | Service | Repo | Language |
+> |---------|------|----------|
+> | REST API | [aqua-os-backend](https://github.com/Franion03/aqua-os-backend) | Go |
+> | Web Dashboard | [aqua-os-web](https://github.com/Franion03/aqua-os-web) | TypeScript/React |
+> | AI Agents | [aqua-os-crew](https://github.com/Franion03/aqua-os-crew) | Python |
+> | Calendar Service | [aqua-os-calendar](https://github.com/Franion03/aqua-os-calendar) | C#/.NET |
+> | Infrastructure | [aqua-os-infrastructure](https://github.com/Franion03/aqua-os-infrastructure) | Terraform |
+>
+> This repo is kept as a reference for the original architecture. See `docker-compose.microservices.yml` to run all services together.
+
+---
+
 Club operations platform for water polo teams. Combines a React dashboard, a FastAPI backend, and CrewAI agents to automate scheduling, training plans, lineups, availability, and social media publishing.
 
 **Current PoC** → live at `https://d2g5jw5n3lwmjc.cloudfront.net`
