@@ -68,6 +68,31 @@ def get_db():
     return conn
 
 
+# ── Players Seed Data ───────────────────────────────────────────────
+PLAYERS_SEED = [
+    {"id": 1, "name": "Liam Alvarez", "age": 11, "level": 2, "position": "Wing",
+     "parent_name": "Roberto Alvarez", "parent_email": "roberto@alvarez.com",
+     "parent_phone": "+41791234561", "swimming": 65, "ball_handling": 58,
+     "shooting": 55, "tactics": 48, "stamina": 70, "status": "active"},
+    {"id": 2, "name": "Mateo Rossi", "age": 13, "level": 3, "position": "Center Forward",
+     "parent_name": "Carla Rossi", "parent_email": "carla@rossi.net",
+     "parent_phone": "+41791234562", "swimming": 80, "ball_handling": 75,
+     "shooting": 72, "tactics": 68, "stamina": 78, "status": "active"},
+    {"id": 3, "name": "Sofia Dubois", "age": 10, "level": 1, "position": "Goalkeeper",
+     "parent_name": "Jean Dubois", "parent_email": "jean@dubois.org",
+     "parent_phone": "+41791234563", "swimming": 45, "ball_handling": 35,
+     "shooting": 40, "tactics": 30, "stamina": 50, "status": "active"},
+    {"id": 4, "name": "Lucas Kovač", "age": 14, "level": 4, "position": "Center Back",
+     "parent_name": "Ivan Kovač", "parent_email": "ivan.kovac@croatia.hr",
+     "parent_phone": "+41791234564", "swimming": 92, "ball_handling": 90,
+     "shooting": 95, "tactics": 88, "stamina": 94, "status": "active"},
+    {"id": 5, "name": "Emma Santos", "age": 12, "level": 2, "position": "Wing",
+     "parent_name": "Isabella Santos", "parent_email": "isabella@santos-family.com",
+     "parent_phone": "+41791234565", "swimming": 70, "ball_handling": 62,
+     "shooting": 60, "tactics": 52, "stamina": 68, "status": "active"},
+]
+
+
 def init_db():
     """Create tables and seed data if empty."""
     conn = get_db()
@@ -123,6 +148,43 @@ def init_db():
             pool TEXT NOT NULL DEFAULT 'Home Pool',
             pool_address TEXT DEFAULT '',
             home_city TEXT DEFAULT 'Bern',
+            score_home INTEGER DEFAULT NULL,
+            score_away INTEGER DEFAULT NULL,
+            notes TEXT DEFAULT '',
+            created_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS players (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            age INTEGER NOT NULL,
+            level INTEGER NOT NULL DEFAULT 1,
+            position TEXT DEFAULT 'Wing',
+            parent_name TEXT DEFAULT '',
+            parent_email TEXT DEFAULT '',
+            parent_phone TEXT DEFAULT '',
+            swimming INTEGER DEFAULT 50,
+            ball_handling INTEGER DEFAULT 50,
+            shooting INTEGER DEFAULT 50,
+            tactics INTEGER DEFAULT 50,
+            stamina INTEGER DEFAULT 50,
+            status TEXT DEFAULT 'active' CHECK(status IN ('active','injured','inactive')),
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        )
+    """)
+
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS training_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_date TEXT NOT NULL,
+            session_time TEXT DEFAULT '18:00',
+            duration_minutes INTEGER DEFAULT 90,
+            focus TEXT DEFAULT 'General',
+            notes TEXT DEFAULT '',
+            level_id INTEGER,
             created_at TEXT DEFAULT (datetime('now'))
         )
     """)
@@ -134,6 +196,20 @@ def init_db():
             conn.execute(
                 "INSERT INTO levels (id, name, description, \"order\", skills) VALUES (?, ?, ?, ?, ?)",
                 (level["id"], level["name"], level["description"], level["order"], level["skills"])
+            )
+        conn.commit()
+
+    # Seed players if empty
+    existing_players = conn.execute("SELECT COUNT(*) FROM players").fetchone()[0]
+    if existing_players == 0:
+        for p in PLAYERS_SEED:
+            conn.execute(
+                """INSERT INTO players (id, name, age, level, position, parent_name, parent_email,
+                   parent_phone, swimming, ball_handling, shooting, tactics, stamina, status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (p["id"], p["name"], p["age"], p["level"], p["position"], p["parent_name"],
+                 p["parent_email"], p["parent_phone"], p["swimming"], p["ball_handling"],
+                 p["shooting"], p["tactics"], p["stamina"], p["status"])
             )
         conn.commit()
 
@@ -316,6 +392,113 @@ def get_match(match_id: int = None, match_date: str = None):
         row = conn.execute("SELECT * FROM matches ORDER BY match_date DESC LIMIT 1").fetchone()
     conn.close()
     return dict(row) if row else None
+
+
+def get_all_matches():
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM matches ORDER BY match_date DESC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def update_match_score(match_id: int, score_home: int, score_away: int, notes: str = ""):
+    conn = get_db()
+    conn.execute(
+        "UPDATE matches SET score_home=?, score_away=?, notes=? WHERE id=?",
+        (score_home, score_away, notes, match_id)
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM matches WHERE id = ?", (match_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+# ── Player CRUD ───────────────────────────────────────────────────
+
+def get_all_players():
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM players ORDER BY name").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_player(player_id: int):
+    conn = get_db()
+    row = conn.execute("SELECT * FROM players WHERE id = ?", (player_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def create_player(name, age, level=1, position="Wing", parent_name="", parent_email="",
+                  parent_phone="", swimming=50, ball_handling=50, shooting=50, tactics=50, stamina=50):
+    conn = get_db()
+    cursor = conn.execute(
+        """INSERT INTO players (name, age, level, position, parent_name, parent_email,
+           parent_phone, swimming, ball_handling, shooting, tactics, stamina)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (name, age, level, position, parent_name, parent_email, parent_phone,
+         swimming, ball_handling, shooting, tactics, stamina)
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM players WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def update_player(player_id: int, **kwargs):
+    conn = get_db()
+    allowed = {"name", "age", "level", "position", "parent_name", "parent_email",
+               "parent_phone", "swimming", "ball_handling", "shooting", "tactics", "stamina", "status"}
+    updates = {k: v for k, v in kwargs.items() if k in allowed and v is not None}
+    if not updates:
+        conn.close()
+        return get_player(player_id)
+    set_clause = ", ".join(f"{k}=?" for k in updates)
+    values = list(updates.values()) + [player_id]
+    conn.execute(f"UPDATE players SET {set_clause}, updated_at=datetime('now') WHERE id=?", values)
+    conn.commit()
+    row = conn.execute("SELECT * FROM players WHERE id = ?", (player_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_player(player_id: int):
+    conn = get_db()
+    conn.execute("DELETE FROM players WHERE id = ?", (player_id,))
+    conn.commit()
+    conn.close()
+    return True
+
+
+# ── Training Session CRUD ─────────────────────────────────────────
+
+def get_all_training_sessions():
+    conn = get_db()
+    rows = conn.execute("SELECT * FROM training_sessions ORDER BY session_date DESC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def create_training_session(session_date, session_time="18:00", duration_minutes=90,
+                           focus="General", notes="", level_id=None):
+    conn = get_db()
+    cursor = conn.execute(
+        """INSERT INTO training_sessions (session_date, session_time, duration_minutes, focus, notes, level_id)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (session_date, session_time, duration_minutes, focus, notes, level_id)
+    )
+    conn.commit()
+    row = conn.execute("SELECT * FROM training_sessions WHERE id = ?", (cursor.lastrowid,)).fetchone()
+    conn.close()
+    return dict(row)
+
+
+def delete_training_session(session_id: int):
+    conn = get_db()
+    conn.execute("DELETE FROM training_sessions WHERE id = ?", (session_id,))
+    conn.commit()
+    conn.close()
+    return True
 
 
 # ── Auto-init on import ─────────────────────────────────────────────

@@ -127,20 +127,6 @@ def _get_crewai_version() -> str:
         return "unknown"
 
 
-# ── Players ─────────────────────────────────────────────────────────────
-@app.get("/api/players")
-def list_players():
-    return {"players": PLAYERS, "count": len(PLAYERS)}
-
-
-@app.get("/api/players/{player_id}")
-def get_player(player_id: int):
-    for p in PLAYERS:
-        if p["id"] == player_id:
-            return p
-    raise HTTPException(status_code=404, detail="Player not found")
-
-
 # ── Crew Orchestration ──────────────────────────────────────────────────
 class CrewRunRequest(BaseModel):
     crew_type: str  # match_prep, enrollment, progress_review, season_plan, injury_response
@@ -380,6 +366,111 @@ def api_arrival_plan(to_station: str, date: str, arrival_time: str):
 def api_return_plan(from_station: str, date: str, departure_time: str):
     """Get SBB connections departing from match location back to Bern."""
     return {"connections": _get_return_plan_raw(from_station, date, departure_time)}
+
+
+# ── Main ────────────────────────────────────────────────────────────────
+
+# ── Players CRUD ────────────────────────────────────────────────────────
+from tools.db import get_all_players, get_player as db_get_player, create_player, update_player, delete_player
+
+class PlayerCreate(BaseModel):
+    name: str
+    age: int
+    level: int = 1
+    position: str = "Wing"
+    parent_name: str = ""
+    parent_email: str = ""
+    parent_phone: str = ""
+    swimming: int = 50
+    ball_handling: int = 50
+    shooting: int = 50
+    tactics: int = 50
+    stamina: int = 50
+
+class PlayerUpdate(BaseModel):
+    name: str | None = None
+    age: int | None = None
+    level: int | None = None
+    position: str | None = None
+    parent_name: str | None = None
+    parent_email: str | None = None
+    parent_phone: str | None = None
+    swimming: int | None = None
+    ball_handling: int | None = None
+    shooting: int | None = None
+    tactics: int | None = None
+    stamina: int | None = None
+    status: str | None = None
+
+@app.get("/api/players")
+def api_list_players():
+    return get_all_players()
+
+@app.get("/api/players/{player_id}")
+def api_get_player(player_id: int):
+    p = db_get_player(player_id)
+    if not p:
+        raise HTTPException(status_code=404, detail="Player not found")
+    return p
+
+@app.post("/api/players")
+def api_create_player(data: PlayerCreate):
+    return create_player(**data.model_dump())
+
+@app.put("/api/players/{player_id}")
+def api_update_player(player_id: int, data: PlayerUpdate):
+    result = update_player(player_id, **data.model_dump(exclude_none=True))
+    if not result:
+        raise HTTPException(status_code=404, detail="Player not found")
+    return result
+
+@app.delete("/api/players/{player_id}")
+def api_delete_player(player_id: int):
+    delete_player(player_id)
+    return {"status": "ok"}
+
+# ── Matches (enhanced) ──────────────────────────────────────────────────
+from tools.db import get_all_matches, update_match_score
+
+@app.get("/api/matches/all")
+def api_list_all_matches():
+    return get_all_matches()
+
+class MatchScoreUpdate(BaseModel):
+    score_home: int
+    score_away: int
+    notes: str = ""
+
+@app.put("/api/matches/{match_id}/score")
+def api_update_match_score(match_id: int, data: MatchScoreUpdate):
+    result = update_match_score(match_id, data.score_home, data.score_away, data.notes)
+    if not result:
+        raise HTTPException(status_code=404, detail="Match not found")
+    return result
+
+# ── Training Sessions ───────────────────────────────────────────────────
+from tools.db import get_all_training_sessions, create_training_session, delete_training_session
+
+class TrainingSessionCreate(BaseModel):
+    session_date: str
+    session_time: str = "18:00"
+    duration_minutes: int = 90
+    focus: str = "General"
+    notes: str = ""
+    level_id: int | None = None
+
+@app.get("/api/training")
+def api_list_training_sessions():
+    return get_all_training_sessions()
+
+@app.post("/api/training")
+def api_create_training_session(data: TrainingSessionCreate):
+    return create_training_session(**data.model_dump())
+
+@app.delete("/api/training/{session_id}")
+def api_delete_training_session(session_id: int):
+    delete_training_session(session_id)
+    return {"status": "ok"}
 
 
 # ── Main ────────────────────────────────────────────────────────────────

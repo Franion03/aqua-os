@@ -26,8 +26,8 @@ on:
     paths:
       - 'cloudformation/**'
       - 'backend/**'
-  schedule:
-    - cron: '0 8 * * *'  # Daily at 08:00 UTC — drift detection
+  # schedule:
+  #   - cron: '0 8 * * *'  # Daily at 08:00 UTC — drift detection (disabled — AWS free trial expired)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
